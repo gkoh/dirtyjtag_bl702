@@ -1,0 +1,11 @@
+build/
+bouffalo_sdk/
+reference/
+*.o
+*.elf
+*.map
+*.bin
+.claude/
+.vscode/
+.idea/
+.mcp.json
