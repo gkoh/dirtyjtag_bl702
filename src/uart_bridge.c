@@ -24,7 +24,9 @@
 static struct bflb_device_s *uart1_dev;
 
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_rx_buf[512];
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_tx_buf[512];
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_tx_buf[2][512];
+static uint8_t tx_fill_idx;  /* buffer being filled by task */
+static uint32_t tx_fill_count; /* bytes in fill buffer */
 static volatile bool cdc_configured;
 static volatile bool cdc_tx_busy;
 static uint32_t debug_rx_bytes;
@@ -184,24 +186,22 @@ void uart_task(void *param)
             apply_line_coding(&pending_line_coding);
         }
 
-        if (cdc_tx_busy) {
-            vTaskDelay(1);
-            continue;
-        }
-
-        uint32_t count = 0;
-        while (count < sizeof(cdc_tx_buf)) {
+        /* Always drain UART FIFO into fill buffer */
+        while (tx_fill_count < sizeof(cdc_tx_buf[0])) {
             int ch = bflb_uart_getchar(uart1_dev);
             if (ch < 0)
                 break;
-            cdc_tx_buf[count++] = (uint8_t)ch;
+            cdc_tx_buf[tx_fill_idx][tx_fill_count++] = (uint8_t)ch;
         }
 
-        if (count > 0) {
-            debug_rx_bytes += count;
+        if (tx_fill_count > 0 && !cdc_tx_busy) {
+            /* Submit fill buffer to USB and swap */
+            debug_rx_bytes += tx_fill_count;
             cdc_tx_busy = true;
-            usbd_ep_start_write(0, CDC_IN_EP, cdc_tx_buf, count);
-        } else {
+            usbd_ep_start_write(0, CDC_IN_EP, cdc_tx_buf[tx_fill_idx], tx_fill_count);
+            tx_fill_idx ^= 1;
+            tx_fill_count = 0;
+        } else if (tx_fill_count == 0) {
             vTaskDelay(1);
         }
     }
