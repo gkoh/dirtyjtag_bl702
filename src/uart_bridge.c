@@ -27,6 +27,13 @@ static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_rx_buf[512];
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_tx_buf[512];
 static volatile bool cdc_configured;
 static volatile bool cdc_tx_busy;
+static uint32_t debug_rx_bytes;
+static uint32_t debug_tx_bytes;
+static uint32_t debug_baudrate = 115200;
+
+/* Deferred UART reconfiguration (set in ISR, applied in task) */
+static volatile bool uart_reconfig_pending;
+static struct cdc_line_coding pending_line_coding;
 
 static void cdc_bulk_out_cb(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
@@ -37,6 +44,7 @@ static void cdc_bulk_out_cb(uint8_t busid, uint8_t ep, uint32_t nbytes)
     for (uint32_t i = 0; i < nbytes; i++) {
         bflb_uart_putchar(uart1_dev, cdc_rx_buf[i]);
     }
+    debug_tx_bytes += nbytes;
 
     /* Re-arm for next transfer */
     usbd_ep_start_read(0, CDC_OUT_EP, cdc_rx_buf, sizeof(cdc_rx_buf));
@@ -94,19 +102,23 @@ void uart_bridge_uart_init(void)
     bflb_uart_init(uart1_dev, &cfg);
 }
 
-/* Override CherryUSB weak callback — reconfigure UART on SET_LINE_CODING */
+/* Override CherryUSB weak callback — ignore reconfig for now */
 void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding *line_coding)
 {
     (void)busid;
     (void)intf;
+    (void)line_coding;
+}
 
+static void apply_line_coding(const struct cdc_line_coding *line_coding)
+{
     if (uart1_dev == NULL)
         return;
 
     bflb_uart_disable(uart1_dev);
 
     struct bflb_uart_config_s cfg = {
-        .baudrate = line_coding->dwDTERate,
+        .baudrate = line_coding->dwDTERate ? line_coding->dwDTERate : 115200,
         .direction = UART_DIRECTION_TXRX,
         .data_bits = UART_DATA_BITS_8,
         .stop_bits = UART_STOP_BITS_1,
@@ -136,6 +148,7 @@ void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_c
     default: cfg.parity = UART_PARITY_NONE; break;
     }
 
+    debug_baudrate = cfg.baudrate;
     bflb_uart_init(uart1_dev, &cfg);
 }
 
@@ -144,6 +157,9 @@ void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
     (void)busid;
     (void)intf;
     cdc_configured = dtr;
+    /* Reset tx busy flag — any in-flight write is stale after port close/reopen */
+    if (dtr)
+        cdc_tx_busy = false;
 }
 
 void uart_bridge_start(void)
@@ -157,7 +173,18 @@ void uart_task(void *param)
     (void)param;
 
     for (;;) {
-        if (!cdc_configured || cdc_tx_busy || uart1_dev == NULL) {
+        if (uart1_dev == NULL) {
+            vTaskDelay(1);
+            continue;
+        }
+
+        /* Apply deferred UART reconfiguration from ISR */
+        if (uart_reconfig_pending) {
+            uart_reconfig_pending = false;
+            apply_line_coding(&pending_line_coding);
+        }
+
+        if (cdc_tx_busy) {
             vTaskDelay(1);
             continue;
         }
@@ -171,10 +198,20 @@ void uart_task(void *param)
         }
 
         if (count > 0) {
+            debug_rx_bytes += count;
             cdc_tx_busy = true;
             usbd_ep_start_write(0, CDC_IN_EP, cdc_tx_buf, count);
         } else {
             vTaskDelay(1);
         }
     }
+}
+
+void uart_bridge_get_debug(struct uart_debug_state *state)
+{
+    state->rx_bytes = debug_rx_bytes;
+    state->tx_bytes = debug_tx_bytes;
+    state->cdc_configured = cdc_configured;
+    state->cdc_tx_busy = cdc_tx_busy;
+    state->baudrate = debug_baudrate;
 }

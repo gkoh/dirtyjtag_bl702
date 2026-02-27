@@ -11,6 +11,7 @@
 #include "usbd_core.h"
 #include "dirtyjtag.h"
 #include "jtag_gpio.h"
+#include "uart_bridge.h"
 
 #define JTAG_OUT_EP  0x01
 #define JTAG_IN_EP   0x82
@@ -58,6 +59,11 @@ static void cmd_handle(const uint8_t *rxbuf, uint32_t count)
             char info_string[10] = "DJTAG2\n";
             memcpy(output_buffer, info_string, 10);
             output_buffer += 10;
+            /* Append debug state (14 bytes) after standard info */
+            struct uart_debug_state dbg;
+            uart_bridge_get_debug(&dbg);
+            memcpy(output_buffer, &dbg, sizeof(dbg));
+            output_buffer += sizeof(dbg);
             break;
         }
 
