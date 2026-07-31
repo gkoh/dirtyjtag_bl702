@@ -14,4 +14,4 @@ include $(BL_SDK_BASE)/project.build
 # blisp injects its own boot header at flash 0x0 (flashoffset=0x2000) and writes the
 # payload at flash 0x2000, which maps to XIP 0x23000000.
 flash: $(BUILD_DIR)
-	blisp write -c bl70x -p $(PORT) --reset build/build_out/dirtyjtag_bl702.bin
+	blisp write -c bl70x -p $(PORT) --reset build/build_out/dirtyjtag_tangprimer20k_bl702.bin

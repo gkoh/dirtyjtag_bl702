@@ -25,4 +25,4 @@ sdk_set_main_file(src/main.c)
 set_property(GLOBAL PROPERTY FW_TOOL_CUSTOM_BOARD_DIR
              $ENV{BL_SDK_BASE}/bsp/board/bl702dk)
 
-project(dirtyjtag)
+project(dirtyjtag_tangprimer20k)
