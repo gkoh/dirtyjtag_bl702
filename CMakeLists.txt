@@ -18,4 +18,11 @@ target_sources(app PRIVATE
 
 sdk_set_main_file(src/main.c)
 
+# Board config (boot2 / partition table / factory DTS) is identical to the SDK's
+# stock bl702dk, so point bflb_fw_post_proc at that copy instead of duplicating it.
+# This property only affects the fw-tools config lookup (bflb_flash.cmake brdcfgdir);
+# our custom board.c / linker script still come from src/board/tang_primer_20k.
+set_property(GLOBAL PROPERTY FW_TOOL_CUSTOM_BOARD_DIR
+             $ENV{BL_SDK_BASE}/bsp/board/bl702dk)
+
 project(dirtyjtag)
