@@ -1,5 +1,4 @@
 build/
-bouffalo_sdk/
 reference/
 *.o
 *.elf

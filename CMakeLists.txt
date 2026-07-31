@@ -8,7 +8,6 @@ set(CONFIG_CHERRYUSB_DEVICE_CDC_ACM 1)
 find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
 sdk_add_include_directories(. src)
-sdk_add_compile_definitions(-DCONFIG_USB_HS)
 
 target_sources(app PRIVATE
     src/usb_descriptors.c
@@ -19,4 +18,4 @@ target_sources(app PRIVATE
 
 sdk_set_main_file(src/main.c)
 
-project(bl616_dirtyjtag)
+project(dirtyjtag)
