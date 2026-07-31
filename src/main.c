@@ -1,13 +1,14 @@
 /*
- * BL616 DirtyJTAG — Main entry point
+ * DirtyJTAG BL702 — Main entry point
  *
  * Composite USB device: DirtyJTAG v2 (vendor bulk) + CDC-ACM (UART bridge)
  */
-#include "board.h"
-#include "bflb_gpio.h"
-#include "usbd_core.h"
 #include "FreeRTOS.h"
+#include "bflb_gpio.h"
+#include "bl702.h"
+#include "board.h"
 #include "task.h"
+#include "usbd_core.h"
 
 #include "dirtyjtag.h"
 #include "jtag_gpio.h"
@@ -16,42 +17,41 @@
 /* Provided by usb_descriptors.c */
 extern void usb_descriptors_init(uint8_t busid);
 
-static void usbd_event_handler(uint8_t busid, uint8_t event)
-{
-    (void)busid;
-    switch (event) {
+static void usbd_event_handler(uint8_t busid, uint8_t event) {
+  (void)busid;
+  switch (event) {
     case USBD_EVENT_RESET:
-        break;
+      break;
     case USBD_EVENT_CONFIGURED:
-        /* Kick off first read on both OUT endpoints */
-        dirtyjtag_start();
-        uart_bridge_start();
-        break;
+      /* Kick off first read on both OUT endpoints */
+      dirtyjtag_start();
+      uart_bridge_start();
+      break;
     default:
-        break;
-    }
+      break;
+  }
 }
 
-int main(void)
-{
-    board_init();
+int main(void) {
+  board_init();
 
-    /* Init USB composite device */
-    usb_descriptors_init(0);
-    dirtyjtag_init(0);
-    uart_bridge_usb_init(0);
-    usbd_initialize(0, 0x20072000, usbd_event_handler);
+  /* Init USB composite device */
+  usb_descriptors_init(0);
+  dirtyjtag_init(0);
+  uart_bridge_usb_init(0);
+  usbd_initialize(0, USB_BASE, usbd_event_handler);
 
-    /* Init GPIO for JTAG */
-    jtag_gpio_init();
+  /* Init GPIO for JTAG */
+  jtag_gpio_init();
 
-    /* Init UART1 for CDC bridge */
-    uart_bridge_uart_init();
+  /* Init UART1 for CDC bridge */
+  uart_bridge_uart_init();
 
-    /* Create UART polling task */
-    xTaskCreate(uart_task, "uart", 1024, NULL, 2, NULL);
+  /* Create UART polling task */
+  xTaskCreate(uart_task, "uart", 1024, NULL, 2, NULL);
 
-    vTaskStartScheduler();
+  vTaskStartScheduler();
 
-    while (1) {}
+  while (1) {
+  }
 }

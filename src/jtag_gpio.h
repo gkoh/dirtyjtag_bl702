@@ -1,8 +1,8 @@
 #ifndef JTAG_GPIO_H
 #define JTAG_GPIO_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 void jtag_gpio_init(void);
 
