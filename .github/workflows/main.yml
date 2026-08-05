@@ -1,0 +1,77 @@
+name: DirtyJTAG BL702 Build
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run clang-format style check
+      uses: jidicula/clang-format-action@v4.18.0
+      with:
+        clang-format-version: '21'
+        check-path: 'src'
+
+  build:
+    needs: format
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+        fetch-depth: 1
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y zlib1g
+
+    - name: Add toolchain to PATH
+      run: echo "$GITHUB_WORKSPACE/toolchain/bin" >> "$GITHUB_PATH"
+
+    - name: Build firmware
+      run: make
+
+    - name: Upload firmware artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dirtyjtag-bl702-firmware
+        path: build/build_out/dirtyjtag_tangprimer20k_bl702.bin
+        if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download firmware artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: dirtyjtag-bl702-firmware
+        merge-multiple: true
+
+    - name: Prepare release assets
+      run: |
+        mv dirtyjtag_tangprimer20k_bl702.bin "dirtyjtag-bl702-${{ github.ref_name }}.bin"
+        sha256sum "dirtyjtag-bl702-${{ github.ref_name }}.bin" > sha256sum.txt
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          dirtyjtag-bl702-${{ github.ref_name }}.bin
+          sha256sum.txt

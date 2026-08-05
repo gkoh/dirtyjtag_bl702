@@ -2,3 +2,6 @@
 	path = bouffalo_sdk
 	url = https://github.com/bouffalolab/bouffalo_sdk.git
 	branch = main
+[submodule "toolchain"]
+	path = toolchain
+	url = https://github.com/bouffalolab/toolchain_gcc_t-head_linux.git

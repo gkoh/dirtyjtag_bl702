@@ -49,29 +49,18 @@ Registered via [pid.codes](https://pid.codes/) (the DirtyJTAG project allocation
 
 ## Prerequisites
 
-The Bouffalo SDK is included as a Git submodule. Initialise it after cloning:
+The Bouffalo SDK and the Xuantie/T-Head RISC-V toolchain are both included as Git submodules. Initialise them after cloning:
 
 ```bash
 git submodule update --init
 ```
 
-The build requires the Xuantie/T-Head RISC-V cross-toolchain (`riscv64-unknown-elf-gcc` 10.2.0), which the SDK expects. You have two options:
+This populates `bouffalo_sdk/` and `toolchain/` (the patched `riscv64-unknown-elf-gcc` 10.2.0 cross-compiler that the SDK expects).
 
-### Option 1: Nix development shell (recommended)
-
-A `default.nix` is provided. It fetches the correct toolchain from Bouffalo Lab's prebuilt repository and sets up the environment automatically:
+Add the toolchain's `bin` directory to your `PATH`:
 
 ```bash
-nix-shell
-```
-
-### Option 2: Manual toolchain
-
-Clone the toolchain separately and add it to your `PATH`:
-
-```bash
-git clone https://github.com/bouffalolab/toolchain_gcc_t-head_linux
-export PATH=/path/to/toolchain_gcc_t-head_linux/bin:$PATH
+export PATH="$(pwd)/toolchain/bin:$PATH"
 ```
 
 ## Building
