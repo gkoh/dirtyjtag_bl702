@@ -86,7 +86,7 @@ The BL702 on the Tang Primer 20K Dock does **not** have secure boot enabled, so 
 3. Run:
 
 ```bash
-make flash PORT=/dev/ttyUSB0
+make upload PORT=/dev/ttyUSB0
 ```
 
 Or directly with blisp:

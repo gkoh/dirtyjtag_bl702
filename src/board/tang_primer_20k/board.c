@@ -13,6 +13,7 @@
 #include "mm.h"
 
 extern void log_start(void);
+extern void bflb_uart_set_console(struct bflb_device_s *dev);
 
 extern uint32_t __HeapBase;
 extern uint32_t __HeapLimit;
