@@ -21,18 +21,14 @@ extern uint32_t __HeapLimit;
 static struct bflb_device_s *rtc;
 #endif
 
-/* Console UART — initialized on pins that don't conflict with JTAG or UART1.
- * The global `console` pointer must be non-NULL before any printf call,
- * otherwise bflb_uart_putchar dereferences NULL and hard-faults.
- * GPIO16/GPIO18 are safe: not used by JTAG (0/1/2/15) or UART1 (24/25). */
 static struct bflb_device_s *console_uart;
 
 static void console_init(void) {
   struct bflb_device_s *gpio = bflb_device_get_by_name("gpio");
 
-  /* UART0 TX=GPIO16, RX=GPIO18 (safe pins, no JTAG/UART1 conflict) */
-  bflb_gpio_uart_init(gpio, GPIO_PIN_16, GPIO_UART_FUNC_UART0_TX);
-  bflb_gpio_uart_init(gpio, GPIO_PIN_18, GPIO_UART_FUNC_UART0_RX);
+  /* UART0 TX=GPIO_14, RX=GPIO_23 (J2 header, per dock schematic) */
+  bflb_gpio_uart_init(gpio, GPIO_PIN_14, GPIO_UART_FUNC_UART0_TX);
+  bflb_gpio_uart_init(gpio, GPIO_PIN_23, GPIO_UART_FUNC_UART0_RX);
 
   console_uart = bflb_device_get_by_name("uart0");
 

@@ -1,36 +1,41 @@
-# BL616 DirtyJTAG
+# Tang Primer 20K Dock (BL702) DirtyJTAG
 
-Open-source replacement JTAG/UART firmware for the **Tang Nano 20K**'s onboard BL616 MCU.
+Open-source replacement JTAG/UART firmware for the **Tang Primer 20K Dock**'s onboard BL702 MCU.
 
 Provides a [DirtyJTAG v2](https://github.com/jeanthom/DirtyJTAG) compatible JTAG interface alongside a CDC-ACM UART bridge as a composite USB device. Works with [openFPGALoader](https://github.com/trabucayre/openFPGALoader) out of the box.
 
+Based on the excellent work by [@pepijndevos](https://github.com/pepijndevos) for the [BL616 on the Tang Nano 20K](https://github.com/pepijndevos/bl616_dirtyjtag).
+
 ## Why?
 
-The Tang Nano 20K ships with Sipeed's proprietary BL616 firmware that emulates an FTDI FT2232. This firmware has known reliability issues with JTAG programming. Since the BL616 has eFuse secure boot enabled at the factory, you cannot simply replace the firmware at address 0x0.
-
-This project works around the limitation by using Sipeed's **partner firmware** at flash address 0x0 (which handles secure boot) and installs DirtyJTAG at address 0x40000. The partner firmware hands off to the custom firmware when no USB host is initially detected at boot.
+The default BL702 MCU firmware shipped with the Tang Primer 20K Dock was intermittently failing when flashing FPGA bitstreams via openFPGALoader. Most files would transfer correctly, but some would error and refuse to complete. Replacing the firmware with a clean, open-source implementation eliminates this unreliability.
 
 ## Features
 
 - **DirtyJTAG v2 protocol** — compatible with openFPGALoader (`-c dirtyJtag`)
-- **CDC-ACM UART bridge** — serial port on UART1 (GPIO11 TX, GPIO13 RX) with configurable baud rate
+- **CDC-ACM UART bridge** — serial port on UART1 (GPIO_24 TX, GPIO_25 RX) with configurable baud rate, bridged to the FPGA
 - **Composite USB device** — JTAG and UART available simultaneously
-- **Minimal footprint** — ~76 KB firmware, runs on FreeRTOS
+- **Console UART** — UART0 on GPIO_14 TX / GPIO_23 RX, available at the J2 header (unpopulated by default)
+- **Minimal footprint** — firmware fits in a single flash image, runs on FreeRTOS
 
 ## Hardware
 
-- [Sipeed Tang Nano 20K](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html) (GW2AR-18 FPGA with onboard BL616)
+- [Sipeed Tang Primer 20K Dock](https://wiki.sipeed.com/hardware/en/tang/tang-primer-20k/primer-20k.html) (GW2A FPGA with onboard BL702)
 
 ### Pin assignments
 
-| Function | GPIO | BL616 Pin |
-|----------|------|-----------|
-| JTAG TMS | GPIO16 | To FPGA |
-| JTAG TCK | GPIO10 | To FPGA |
-| JTAG TDI | GPIO12 | To FPGA |
-| JTAG TDO | GPIO14 | To FPGA |
-| UART1 TX | GPIO11 | To FPGA |
-| UART1 RX | GPIO13 | To FPGA |
+The BL702 routes JTAG and UART signals to the FPGA via a resistor network. The pin assignments below are taken from the dock schematic (P001_Bl702, Rev 1.1) and verified empirically.
+
+| Function | BL702 GPIO | Notes |
+|----------|-----------|-------|
+| JTAG TMS | GPIO_2 | Output to FPGA |
+| JTAG TCK | GPIO_15 | Output to FPGA |
+| JTAG TDI | GPIO_0 | Output to FPGA |
+| JTAG TDO | GPIO_1 | Input from FPGA |
+| UART1 TX | GPIO_24 | CDC-ACM bridge to FPGA |
+| UART1 RX | GPIO_25 | CDC-ACM bridge from FPGA |
+| Console UART0 TX | GPIO_14 | Available at unpopulated J2 header |
+| Console UART0 RX | GPIO_23 | Available at unpopulated J2 header |
 
 ## USB identity
 
@@ -44,61 +49,66 @@ Registered via [pid.codes](https://pid.codes/) (the DirtyJTAG project allocation
 
 ## Prerequisites
 
-- [Bouffalo SDK](https://github.com/bouffalolab/bouffalo_sdk) (tested with v2.3.16)
-- Sipeed partner firmware binary: `bl616_fpga_partner_20kNano.bin`
-  - Download from [Sipeed](https://dl.sipeed.com/shareURL/TANG/Debugger/onboard/BL616/2025030317)
-  - Place in the project root directory
+The Bouffalo SDK is included as a Git submodule. Initialise it after cloning:
+
+```bash
+git submodule update --init
+```
+
+The build requires the Xuantie/T-Head RISC-V cross-toolchain (`riscv64-unknown-elf-gcc` 10.2.0), which the SDK expects. You have two options:
+
+### Option 1: Nix development shell (recommended)
+
+A `default.nix` is provided. It fetches the correct toolchain from Bouffalo Lab's prebuilt repository and sets up the environment automatically:
+
+```bash
+nix-shell
+```
+
+### Option 2: Manual toolchain
+
+Clone the toolchain separately and add it to your `PATH`:
+
+```bash
+git clone https://github.com/bouffalolab/toolchain_gcc_t-head_linux
+export PATH=/path/to/toolchain_gcc_t-head_linux/bin:$PATH
+```
 
 ## Building
 
-Clone the SDK (or symlink) into the project directory:
+The project uses CMake via the Bouffalo SDK's build system wrapper. The default target is `CHIP=bl702 BOARD=tang_primer_20k`.
 
 ```bash
-git clone https://github.com/bouffalolab/bouffalo_sdk.git
-# or: ln -s /path/to/bouffalo_sdk .
+make
 ```
 
-Build:
+The firmware binary is written to:
 
-```bash
-export PATH=$(pwd)/bouffalo_sdk/tools/toolchain_gcc_t-head_linux/bin:$PATH
-make CHIP=bl616 BOARD=bl616dk
+```
+build/build_out/dirtyjtag_tangprimer20k_bl702.bin
 ```
 
 ## Flashing
 
-The flash configuration (`flash_prog_cfg.ini`) writes two images:
-1. **Sipeed partner firmware** at 0x0 — encrypted first-stage that handles secure boot
-2. **DirtyJTAG firmware** at 0x40000 — this project's firmware
+The BL702 on the Tang Primer 20K Dock does **not** have secure boot enabled, so the firmware can be flashed as a single image at address `0x0` using [blisp](https://github.com/pine64/blisp):
 
-To flash:
-
-1. Hold the **BOOT** button (next to the HDMI connector) while plugging in USB
-2. The BL616 will appear as `Bouffalo CDC DEMO` on a virtual COM port
+1. Hold the **BOOT** button while plugging in USB, or short the BOOT pin to ground.
+2. The BL702 enters ROM bootloader mode.
 3. Run:
 
 ```bash
-make flash CHIP=bl616 COMX=/dev/ttyACM0
+make flash PORT=/dev/ttyUSB0
 ```
 
-## Boot sequence
+Or directly with blisp:
 
-The Tang Nano 20K's BL616 has **eFuse secure boot** enabled by Sipeed at the factory. This means:
+```bash
+blisp write -c bl70x -p /dev/ttyUSB0 --reset build/build_out/dirtyjtag_tangprimer20k_bl702.bin
+```
 
-1. The ROM bootloader only executes AES-128 encrypted firmware at flash address 0x0
-2. The partner firmware at 0x0 runs first
-3. **If no USB host is detected** at boot, the partner firmware loads and executes the firmware at 0x40000
-4. If USB is detected, the partner firmware stays in FTDI bridge mode
+On some boards, the bootloader enumerates as a CDC device. If so, replace the port path with the correct `/dev/ttyACMx` node.
 
-### Important: power-on sequence
-
-Because the handoff only occurs when no USB is initially detected, you need to:
-
-1. Power the Tang Nano 20K **without** a USB data connection (e.g., power-only cable, external supply, or USB hub with data lines disconnected)
-2. After the DirtyJTAG firmware boots, connect the USB data lines
-3. The device will enumerate as `1209:c0ca DirtyJTAG`
-
-Alternatively, if the FPGA is configured to not pull the USB detect lines, the handoff may occur automatically. The exact detection mechanism is internal to Sipeed's encrypted partner firmware.
+After flashing, reset the board. The device will enumerate as `1209:c0ca DirtyJTAG`.
 
 ## Usage
 
@@ -108,71 +118,76 @@ Alternatively, if the FPGA is configured to not pull the USB detect lines, the h
 # Detect FPGA
 openFPGALoader -c dirtyJtag --detect
 
-# Program bitstream
-openFPGALoader -c dirtyJtag -b tangnano20k bitstream.fs
+# Program bitstream to SRAM
+openFPGALoader -c dirtyJtag -b tangprimer20k bitstream.fs
 
-# Program to flash
-openFPGALoader -c dirtyJtag -b tangnano20k -f bitstream.fs
+# Program bitstream to flash
+openFPGALoader -c dirtyJtag -b tangprimer20k -f bitstream.fs
 ```
 
-### UART
+### UART (CDC-ACM bridge)
 
 The CDC-ACM interface appears as `/dev/ttyACMx`. Connect with any serial terminal:
 
 ```bash
-picocom /dev/ttyACM1 -b 115200
+picocom /dev/ttyACM0 -b 115200
 ```
 
-The baud rate is configurable via the standard CDC SET_LINE_CODING request (most terminal programs handle this automatically).
+The baud rate is configurable via the standard CDC SET_LINE_CODING request (most terminal programs handle this automatically). The bridge carries data between the host and the FPGA's UART via UART1 (GPIO_24/25).
+
+### Console UART
+
+The console UART0 (`printf` output from the BL702 firmware) is routed to GPIO_14 TX / GPIO_23 RX, which correspond to the J2 header on the dock. This header is shipped unpopulated, so observing the console requires soldering to those pads or populating the header. The console operates at 2 Mbaud.
+
+To observe the console output:
+
+1. Solder to the J2 TX pad (GPIO_14) and GND. The RX pad (GPIO_23) is only needed for bidirectional use.
+2. Connect a 3.3 V USB-TTL adapter or logic analyser.
+3. Open a terminal at 2 Mbaud and reset the board.
+
+If your adapter does not support 2 Mbaud reliably, lower the baud rate temporarily in `src/board/tang_primer_20k/board.c` before rebuilding.
+
+The console UART is completely untested and not verified to function.
 
 ## Project structure
 
 ```
-├── Makefile              # SDK build system entry point
-├── CMakeLists.txt        # Project config (FreeRTOS + CherryUSB)
-├── FreeRTOSConfig.h      # FreeRTOS configuration
-├── usb_config.h          # CherryUSB device configuration
-├── flash_prog_cfg.ini    # Flash programming layout
-└── src/
-    ├── main.c            # Entry point, USB + FreeRTOS init
-    ├── usb_descriptors.c # Composite USB descriptors
-    ├── dirtyjtag.c/h     # DirtyJTAG v2 protocol handler
-    ├── jtag_gpio.c/h     # GPIO bit-bang JTAG engine
-    └── uart_bridge.c/h   # CDC-ACM to UART1 bridge
+├── Makefile                    # SDK build wrapper (CMake underneath)
+├── CMakeLists.txt              # Project configuration
+├── default.nix                 # Nix dev shell with toolchain
+├── src/
+│   ├── board/
+│   │   ├── pins.h              # JTAG and UART pin definitions
+│   │   └── tang_primer_20k/
+│   │       ├── board.c         # Clock init, console UART, boot banner
+│   │       ├── board.h         # Board header
+│   │       ├── CMakeLists.txt  # Board-specific build rules
+│   │       └── bl702_flash.ld  # Linker script
+│   ├── main.c                  # Entry point: init, USB, FreeRTOS
+│   ├── usb_descriptors.c       # Composite USB descriptors (JTAG + CDC-ACM)
+│   ├── dirtyjtag.c/h           # DirtyJTAG v2 protocol handler
+│   ├── jtag_gpio.c/h           # GPIO bit-bang JTAG engine
+│   └── uart_bridge.c/h         # CDC-ACM to UART1 bridge
+└── bouffalo_sdk/               # SDK submodule (Git)
 ```
 
 ## Known limitations
 
-- The partner firmware handoff requires initial boot without USB data connection
-- Bulk endpoint max packet size is 64 bytes (openFPGALoader expects this, but Linux logs warnings about HS compliance)
-- JTAG frequency control is approximate (delay loop calibration)
-- No TRST/SRST support (not connected on Tang Nano 20K)
+- **J2 header is unpopulated** — the console UART0 output is available but not accessible without soldering.
+- **JTAG frequency control is approximate** — delay loop calibration, not hardware-timed.
+- **No TRST/SRST support** — not connected between the BL702 and the FPGA on this board.
+- **Bulk endpoint max packet size is 64 bytes** — openFPGALoader expects this, but Linux may log warnings about high-speed compliance because the device enumerates as USB 2.0.
 
-## Background: Tang Nano 20K secure boot
+## Background
 
-Starting around early 2024, Sipeed began shipping Tang Nano 20K boards with **eFuse secure boot** enabled on the BL616 MCU. The eFuses contain an AES key and the secure boot flag is permanently blown, meaning:
-
-- The ROM bootloader at address 0x0 only accepts encrypted firmware
-- You cannot flash custom unencrypted firmware directly
-- The encryption key is not publicly available
-
-The **partner firmware** (`bl616_fpga_partner_20kNano.bin`) is a Sipeed-signed encrypted binary that:
-- Provides FTDI FT2232 emulation for JTAG/UART (the factory default behavior)
-- Supports loading a secondary unencrypted firmware from flash address 0x40000
-- Decides at boot whether to run as FTDI bridge (USB detected) or hand off to 0x40000 (standalone)
-
-For more details, see:
-- [Tang Nano 20K variants](https://github.com/MiSTle-Dev/.github/wiki/Versions_TangNano20k)
-- [nand2mario's writeup on the BL616 architecture](https://nand2mario.github.io/posts/2025/mcu_for_better_fpga_gaming/)
-- [FPGA-Companion project](https://github.com/MiSTle-Dev/FPGA-Companion)
+This port started from the BL616 DirtyJTAG project by Pepijn de Vos, which targets the Tang Nano 20K. The Tang Primer 20K Dock uses a different MCU (BL702 instead of BL616) and a different flash layout (single image, no secure boot partner firmware), so the GPIO HAL, clock tree, USB endpoint numbering, and build system all needed adjustment. The BL702's GPIO mux is more flexible than the BL616's, which simplifies pin assignment but requires care when mapping UART signals to pads.
 
 ## Credits
 
 - [DirtyJTAG](https://github.com/jeanthom/DirtyJTAG) by Jean THOMAS — protocol and command implementation (MIT license)
 - [pico-dirtyJtag](https://github.com/phdussud/pico-dirtyJtag) — reference implementation
-- [FPGA-Companion](https://github.com/MiSTle-Dev/FPGA-Companion) — partner firmware documentation and flash layout
-- [firmware-bl616](https://github.com/nand2mario/firmware-bl616) — BL616 USB/GPIO reference for Tang boards
-- [Bouffalo SDK](https://github.com/bouffalolab/bouffalo_sdk) — BL616 HAL and CherryUSB stack
+- [bl616_dirtyjtag](https://github.com/pepijndevos/bl616_dirtyjtag) by Pepijn de Vos — original BL616 port for Tang Nano 20K
+- [Bouffalo SDK](https://github.com/bouffalolab/bouffalo_sdk) — BL702 HAL, FreeRTOS, and CherryUSB stack
 
 ## License
 
